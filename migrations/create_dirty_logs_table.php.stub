@@ -1,0 +1,38 @@
+<?php
+
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
+
+/**
+ * Class CreateDirtyLogsTable
+ */
+class CreateDirtyLogsTable extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up()
+    {
+        Schema::create('dirty_logs', function (Blueprint $table) {
+            $table->id('id');
+            $table->string('name')->nullable()->comment('日志名称');
+            $table->text('description')->comment('日志内容');
+            $table->morphs('subject');
+            $table->json('properties')->nullable()->comment('变动属性');
+            $table->nullableMorphs('causer');
+            $table->timestamps();
+
+            $table->index('name');
+            $table->index(['subject_id', 'subject_type'], 'subject');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down()
+    {
+        Schema::dropIfExists('dirty_logs');
+    }
+}

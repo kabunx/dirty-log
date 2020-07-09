@@ -1,0 +1,36 @@
+{
+    "name": "z-golly/dirty-log",
+    "description": "模型数据变更日志",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "jonathan",
+            "email": "zjonathan@aliyun.com"
+        }
+    ],
+    "require": {
+        "php": "^7.2.5",
+        "laravel/framework": "^7.0"
+    },
+    "require-dev": {},
+    "autoload": {
+        "psr-4": {
+            "Golly\\DirtyLog\\": "src/"
+        },
+        "files": [
+            "src/helpers.php"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Golly\\DirtyLog\\DirtyLogServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
