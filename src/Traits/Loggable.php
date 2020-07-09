@@ -31,7 +31,7 @@ trait Loggable
      *
      * @var string
      */
-    protected $defaultLogDescription = 'The subject :subject_type[:subject_id] was :handle by :causer.name';
+    protected $defaultLogDescription = 'The subject :subject_type[:subject_id] was :handled by :causer.name';
 
     /**
      * 模型数据变更日志
@@ -161,7 +161,7 @@ trait Loggable
     {
         $description = $this->logDescription ?? $this->defaultLogDescription;
 
-        return str_replace(':handle', $eventName, $description);
+        return str_replace(':handled', $eventName, $description);
     }
 
 
