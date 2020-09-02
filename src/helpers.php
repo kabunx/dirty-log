@@ -1,10 +1,10 @@
 <?php
 
-use Golly\ActivityLog\ActivityLogger;
+use Golly\DirtyLog\DirtyLogger;
 
-if (!function_exists('activity')) {
-    function activity(string $logName = null): ActivityLogger
+if (!function_exists('dirty')) {
+    function dirty(string $logName = null): DirtyLogger
     {
-        return app(ActivityLogger::class)->useLog($logName);
+        return app(DirtyLogger::class)->useLog($logName);
     }
 }
