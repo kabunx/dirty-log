@@ -6,16 +6,17 @@ namespace Golly\DirtyLog\Traits;
 
 use Exception;
 use Golly\DirtyLog\DirtyLogger;
+use Golly\DirtyLog\Exceptions\CouldNotLogException;
 use Golly\DirtyLog\Models\DirtyLog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 
 /**
  * Trait Loggable
  * @package Golly\DirtyLog\Traits
+ * @property \Illuminate\Database\Eloquent\Collection $dirtyLogs
  * @mixin Model
  */
 trait Loggable
@@ -31,27 +32,29 @@ trait Loggable
      *
      * @var string
      */
-    protected $defaultLogDescription = 'The subject :subject_type[:subject_id] was :handled by :causer.name';
+    protected $defaultLogTemplate = 'The subject :subject_type[:subject_id] was :handled by :causer_type[:causer_id]';
 
     /**
      * 模型数据变更日志
+     *
+     * @return void
      */
     protected static function bootLoggable()
     {
-        static::eventsToBeRecorded()->each(function ($eventName) {
-            return static::$eventName(function (Model $model) use ($eventName) {
-                /** @var Model|self $model */
-                if (!$model->shouldLogEvent($eventName)) {
-                    return;
+        static::eventsToBeLogged()->each(function ($eventName) {
+            return static::$eventName(function ($model) use ($eventName) {
+                try {
+                    /** @var Model|self $model */
+                    $logName = $model->getLogName($model, $eventName);
+                    $template = $model->getLogTemplate($eventName);
+                    $logger = (new DirtyLogger())->setName($logName)->on($model);
+                    if ($model->causer) {
+                        $logger->by($model->causer);
+                    }
+                    $logger->write($template);
+                } catch (CouldNotLogException $e) {
+
                 }
-                $logName = $model->getLogName($model, $eventName);
-                $description = $model->getLogDescription($eventName);
-                $props = $model->getChangeProps();
-                $logger = (new DirtyLogger())->useLog($logName)->on($model)->withProperties($props);
-                if ($model->causer) {
-                    $logger->by($model->causer);
-                }
-                $logger->log($description);
             });
         });
     }
@@ -65,10 +68,22 @@ trait Loggable
      */
     public function createByCauser(array $attributes = [], Model $causer = null)
     {
-        return tap($this->newModelInstance($attributes), function ($instance) use ($causer) {
+        return tap($this->newInstance($attributes), function ($instance) use ($causer) {
             $instance->setCauser($causer);
             $instance->save();
         });
+    }
+
+    /**
+     * @param array $attributes
+     * @param Model|null $causer
+     * @return bool
+     */
+    public function updateByCauser(array $attributes = [], Model $causer = null)
+    {
+        $this->setCauser($causer);
+
+        return $this->update($attributes);
     }
 
     /**
@@ -79,7 +94,7 @@ trait Loggable
     {
         $this->setCauser($causer);
         try {
-            return parent::delete();
+            return $this->delete();
         } catch (Exception $e) {
             return false;
         }
@@ -88,7 +103,7 @@ trait Loggable
     /**
      * @return MorphMany
      */
-    public function logs()
+    public function dirtyLogs()
     {
         return $this->morphMany(
             DirtyLog::class,
@@ -100,10 +115,13 @@ trait Loggable
      * 在某些条件下需要指定执行者
      *
      * @param Model|null $causer
+     * @return $this
      */
     public function setCauser(Model $causer = null)
     {
-        $causer && $this->causer = $causer;
+        $this->causer = $causer;
+
+        return $this;
     }
 
     /**
@@ -111,7 +129,7 @@ trait Loggable
      *
      * @return Collection
      */
-    protected static function eventsToBeRecorded(): Collection
+    protected static function eventsToBeLogged(): Collection
     {
         $events = collect(['created', 'updated', 'deleted']);
 
@@ -120,26 +138,6 @@ trait Loggable
         }
 
         return $events;
-    }
-
-
-    /**
-     * @param string $eventName
-     * @return bool
-     */
-    protected function shouldLogEvent(string $eventName): bool
-    {
-        if (!in_array($eventName, ['created', 'updated'])) {
-            return true;
-        }
-
-        if (Arr::has($this->getDirty(), 'deleted_at')) {
-            if ($this->getDirty()['deleted_at'] === null) {
-                return false;
-            }
-        }
-
-        return (bool)count($this->getDirty());
     }
 
 
@@ -157,24 +155,11 @@ trait Loggable
      * @param string $eventName
      * @return string
      */
-    protected function getLogDescription(string $eventName): string
+    protected function getLogTemplate(string $eventName): string
     {
-        $description = $this->logDescription ?? $this->defaultLogDescription;
+        $template = $this->logTemplate ?? $this->defaultLogTemplate;
 
-        return str_replace(':handled', $eventName, $description);
-    }
-
-
-    /**
-     * @return array
-     */
-    protected function getChangeProps(): array
-    {
-        return [
-            'new' => $this->getAttributes(),
-            'old' => $this->getRawOriginal(),
-            'dirty' => $this->getDirty()
-        ];
+        return str_replace(':handled', $eventName, $template);
     }
 
 }
