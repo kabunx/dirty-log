@@ -8,21 +8,21 @@ use Golly\DirtyLog\Contracts\DirtyLogInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
-use Illuminate\Support\Collection;
+use Illuminate\Support\Arr;
 
 /**
  * Class Loggable
  * @property string $name
- * @property string $description
+ * @property string $template
  * @property string|null $subject_type
  * @property string|null $subject_id
- * @property Collection $properties
+ * @property \Illuminate\Support\Collection $properties
  * @property string|null $causer_type
  * @property string|null $causer_id
  * @property string $created_at
  * @property string $updated_at
- * @property mixed $subject
- * @property mixed $causer
+ * @property Model $subject
+ * @property Model|null $causer
  * @method Builder inLog(string $logName)
  * @method Builder causedBy(Model $model)
  * @method Builder onSubject(Model $model)
@@ -34,7 +34,7 @@ class DirtyLog extends Model implements DirtyLogInterface
     /**
      * @var array
      */
-    public $guarded = [];
+    protected $guarded = [];
 
     /**
      * @var string[]
@@ -66,50 +66,24 @@ class DirtyLog extends Model implements DirtyLogInterface
     /**
      * 获取修改属性的字段
      *
-     * @param string $propertyName
-     * @return mixed
+     * @param array|string $keys
+     * @return \Illuminate\Support\Collection
      */
-    public function getExtraProperty(string $propertyName)
+    public function getChangedProperties($keys)
     {
-        return $this->properties->get($propertyName);
-    }
-
-    /**
-     * 获取变动属性
-     *
-     * @return Collection
-     */
-    public function changes(): Collection
-    {
-        if (!$this->properties instanceof Collection) {
-            return new Collection();
-        }
-
-        return $this->properties->only(['keys', 'new', 'old']);
-    }
-
-    /**
-     * 获取变动属性
-     *
-     * @return Collection
-     */
-    public function getChangeAttrs(): Collection
-    {
-        return $this->changes();
+        return $this->properties->only($keys);
     }
 
     /**
      * @param Builder $query
-     * @param mixed ...$logNames
+     * @param mixed ...$names
      * @return Builder
      */
-    public function scopeInLog(Builder $query, ...$logNames): Builder
+    public function scopeInLog(Builder $query, ...$names): Builder
     {
-        if (is_array($logNames[0])) {
-            $logNames = $logNames[0];
-        }
+        $names = Arr::flatten($names);
 
-        return $query->whereIn('name', $logNames);
+        return $query->whereIn('name', $names);
     }
 
     /**

@@ -6,7 +6,6 @@ namespace Golly\DirtyLog\Contracts;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
-use Illuminate\Support\Collection;
 
 /**
  * Interface DirtyLogInterface
@@ -15,18 +14,41 @@ use Illuminate\Support\Collection;
 interface DirtyLogInterface
 {
 
+    /**
+     * @return MorphTo
+     */
     public function subject(): MorphTo;
 
+    /**
+     * @return MorphTo
+     */
     public function causer(): MorphTo;
 
-    public function getExtraProperty(string $propertyName);
+    /**
+     * @param $keys
+     * @return \Illuminate\Support\Collection
+     */
+    public function getChangedProperties($keys);
 
-    public function changes(): Collection;
+    /**
+     * @param Builder $query
+     * @param ...$names
+     * @return Builder
+     */
+    public function scopeInLog(Builder $query, ...$names): Builder;
 
-    public function scopeInLog(Builder $query, ...$logNames): Builder;
-
+    /**
+     * @param Builder $query
+     * @param Model $causer
+     * @return Builder
+     */
     public function scopeCausedBy(Builder $query, Model $causer): Builder;
 
+    /**
+     * @param Builder $query
+     * @param Model $subject
+     * @return Builder
+     */
     public function scopeOnSubject(Builder $query, Model $subject): Builder;
 
 }

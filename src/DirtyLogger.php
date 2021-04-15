@@ -3,14 +3,10 @@
 
 namespace Golly\DirtyLog;
 
-
-use Carbon\Carbon;
 use Golly\DirtyLog\Contracts\DirtyLogInterface;
+use Golly\DirtyLog\Exceptions\CouldNotLogException;
 use Golly\DirtyLog\Models\DirtyLog;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Str;
-use Illuminate\Support\Traits\Macroable;
 
 /**
  * Class DirtyLogger
@@ -18,240 +14,209 @@ use Illuminate\Support\Traits\Macroable;
  */
 class DirtyLogger
 {
-    use Macroable;
-
     /**
-     * 默认日志名称
-     *
      * @var string
      */
-    protected $defaultLogName = 'default';
+    protected $name = 'default';
+
+    /**
+     * @var string
+     */
+    protected $template = 'The subject {{subject}} was modified by {{causer}}.';
 
     /**
      * @var DirtyLog
      */
-    protected $activity;
+    protected $dirtyLog;
 
+    /**
+     * @var Model
+     */
+    protected $subject;
+
+    /**
+     * @var Model
+     */
+    protected $causer;
+
+    /**
+     * DirtyLogger constructor.
+     */
+    public function __construct()
+    {
+        $this->initDirtyLog();
+    }
+
+    /**
+     * @return static
+     */
+    public static function init()
+    {
+        return new static();
+    }
+
+    /**
+     * @param string $name
+     * @return $this
+     */
+    public function inLog(string $name)
+    {
+        return $this->setName($name);
+    }
 
     /**
      * 变动模型
      *
-     * @param Model $model
+     * @param Model $subject
      * @return $this
      */
-    public function performedOn(Model $model)
+    public function on(Model $subject)
     {
-        $this->getActivity()->subject()->associate($model);
+        $this->subject = $subject;
+        $this->dirtyLog->subject()->associate($subject);
 
         return $this;
     }
 
     /**
-     * 变动模型
-     *
-     * @param Model $model
-     * @return $this
-     */
-    public function on(Model $model)
-    {
-        return $this->performedOn($model);
-    }
-
-
-    /**
      * 触发者
      *
-     * @param mixed $causer
+     * @param Model|null $causer
      * @return $this
      */
-    public function causedBy(Model $causer = null)
+    public function by(Model $causer = null)
     {
-        if ($causer === null) {
-            return $this;
+        if (is_null($causer)) {
+            return $this->byAnonymous();
         }
-        $this->getActivity()->causer()->associate($causer);
+        $this->causer = $causer;
+        $this->dirtyLog->causer()->associate($causer);
 
         return $this;
     }
 
     /**
-     * 触发者
-     *
-     * @param Model|null $model
-     * @return $this
-     */
-    public function by(Model $model = null)
-    {
-        return $this->causedBy($model);
-    }
-
-
-    /**
-     * 不指定触发者
-     *
-     * @return $this
-     */
-    public function causedByAnonymous()
-    {
-        $this->activity->causer_id = null;
-        $this->activity->causer_type = null;
-
-        return $this;
-    }
-
-    /**
-     * 不指定触发者
+     * 匿名用户操作
      *
      * @return $this
      */
     public function byAnonymous()
     {
-        return $this->causedByAnonymous();
-    }
-
-    /**
-     * 变动属性集
-     *
-     * @param $properties
-     * @return $this
-     */
-    public function withProperties($properties)
-    {
-        $this->getActivity()->properties = collect($properties);
+        $this->dirtyLog->causer_id = null;
+        $this->dirtyLog->causer_type = null;
 
         return $this;
     }
 
     /**
-     * 变体属性
+     * @param array $properties
+     * @return $this
+     */
+    public function changes(array $properties)
+    {
+        return $this->setProperties($properties);
+    }
+
+    /**
+     * 写入日志
+     *
+     * @param string|null $template
+     * @return $this
+     * @throws CouldNotLogException
+     */
+    public function write(string $template = null)
+    {
+        if (is_null($this->subject)) {
+            throw new CouldNotLogException('监控模型不存在');
+        }
+        // 新建模型
+        if ($this->subject->wasRecentlyCreated) {
+            $changes = $this->subject->attributesToArray();
+        } else {
+            $changes = $this->subject->getChanges();
+        }
+        $this->setProperties($changes);
+        // 数据发生了变化
+        if ($this->dirtyLog->properties->isNotEmpty()) {
+            if (is_null($this->dirtyLog->name)) {
+                $this->setName($this->name);
+            }
+            $template = $template ?: $this->template;
+            $this->setTemplate($template);
+            $this->dirtyLog->save();
+        }
+
+        // 重置
+        $this->initDirtyLog();
+
+        return $this;
+    }
+
+    /**
+     * 日志名称
+     *
+     * @param string $name
+     * @return $this
+     */
+    public function setName(string $name)
+    {
+        $this->dirtyLog->name = $name;
+
+        return $this;
+    }
+
+    /**
+     * 变动属性
+     *
+     * @param array $properties
+     * @return $this
+     */
+    public function setProperties(array $properties)
+    {
+        $this->dirtyLog->properties = collect($properties);
+
+        return $this;
+    }
+
+    /**
+     * 补充属性
      *
      * @param string $key
      * @param $value
      * @return $this
      */
-    public function withProperty(string $key, $value)
+    public function addProperty(string $key, $value)
     {
-        $this->getActivity()->properties = $this->getActivity()->properties->put($key, $value);
+        $this->dirtyLog->properties->put($key, $value);
 
         return $this;
     }
-
-    /**
-     * 创建时间
-     *
-     * @param Carbon $dateTime
-     * @return $this
-     */
-    public function createdAt(Carbon $dateTime)
-    {
-        $this->getActivity()->created_at = $dateTime;
-
-        return $this;
-    }
-
-    /**
-     * 日志名称
-     *
-     * @param string $logName
-     * @return $this
-     */
-    public function useLog(string $logName)
-    {
-        $this->getActivity()->name = $logName;
-
-        return $this;
-    }
-
-    /**
-     * 日志名称
-     *
-     * @param string $logName
-     * @return $this
-     */
-    public function inLog(string $logName)
-    {
-        return $this->useLog($logName);
-    }
-
-    /**
-     * @param callable $callback
-     * @param string|null $eventName
-     * @return $this
-     */
-    public function tap(callable $callback, string $eventName = null)
-    {
-        call_user_func($callback, $this->getActivity(), $eventName);
-
-        return $this;
-    }
-
 
     /**
      * 保存描述信息
      *
-     * @param string $description
-     * @return DirtyLogInterface
+     * @param string $template
+     * @return $this
      */
-    public function log(string $description)
+    public function setTemplate(string $template)
     {
-        $activity = $this->activity;
+        $this->dirtyLog->template = $template;
 
-        $activity->description = $this->replacePlaceholders(
-            $activity->description ?? $description,
-            $activity
-        );
-        $activity->save();
-
-        $this->activity = null;
-
-        return $activity;
-    }
-
-    /**
-     * 描述模版替换(The subject :subject.name was handled by :causer.name and Laravel is :properties.laravel)
-     *
-     * @param string $description
-     * @param DirtyLogInterface $activity
-     * @return string
-     */
-    protected function replacePlaceholders(string $description, DirtyLogInterface $activity): string
-    {
-        return preg_replace_callback('/:[a-z0-9._-]+/i', function ($match) use ($activity) {
-            $match = $match[0];
-
-            $attribute = Str::before(Str::after($match, ':'), '.');
-
-            if (!in_array($attribute, ['subject', 'causer', 'properties'])) {
-                return $activity->$attribute ?? $match;
-            }
-
-            $propertyName = substr($match, strpos($match, '.') + 1);
-
-            $attributeValue = $activity->$attribute;
-
-            if (is_null($attributeValue)) {
-                return $match;
-            }
-
-            $attributeValue = $attributeValue->toArray();
-
-            return Arr::get($attributeValue, $propertyName, $match);
-        }, $description);
+        return $this;
     }
 
     /**
      * @return DirtyLogInterface
      */
-    protected function getActivity(): DirtyLogInterface
+    public function initDirtyLog(): DirtyLogInterface
     {
-        if (!$this->activity instanceof DirtyLogInterface) {
-            $user = auth()->user();
-            $this->activity = new DirtyLog();
-            $this->useLog($this->defaultLogName)
-                ->withProperties([])
-                ->causedBy($user);
+        $this->dirtyLog = new DirtyLog();
+        $this->dirtyLog->properties = collect();
+        if ($user = auth()->user()) {
+            $this->by($user);
         }
+        $this->subject = null;
 
-        return $this->activity;
+        return $this->dirtyLog;
     }
 }

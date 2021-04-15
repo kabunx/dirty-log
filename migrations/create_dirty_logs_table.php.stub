@@ -15,16 +15,15 @@ class CreateDirtyLogsTable extends Migration
     public function up()
     {
         Schema::create('dirty_logs', function (Blueprint $table) {
-            $table->id('id');
+            $table->id();
             $table->string('name')->nullable()->comment('日志名称');
-            $table->text('description')->comment('日志内容');
+            $table->string('template')->comment('日志模板');
             $table->morphs('subject');
             $table->json('properties')->nullable()->comment('变动属性');
             $table->nullableMorphs('causer');
             $table->timestamps();
 
             $table->index('name');
-            $table->index(['subject_id', 'subject_type'], 'subject');
         });
     }
 
