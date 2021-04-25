@@ -12,6 +12,9 @@ use Illuminate\Support\ServiceProvider;
 class DirtyLogServiceProvider extends ServiceProvider
 {
 
+    /**
+     * @return void
+     */
     public function boot()
     {
         if ($this->app->runningInConsole()) {

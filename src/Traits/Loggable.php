@@ -44,7 +44,7 @@ trait Loggable
         static::eventsToBeLogged()->each(function ($eventName) {
             return static::$eventName(function ($model) use ($eventName) {
                 try {
-                    /** @var Model|self $model */
+                    /** @var Model|Loggable $model */
                     $logName = $model->getLogName($model, $eventName);
                     $template = $model->getLogTemplate($eventName);
                     $logger = (new DirtyLogger())->setName($logName)->on($model);
